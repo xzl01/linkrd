@@ -1,0 +1,7 @@
+# Linkr USB CDC-ACM serial port (VID 1D6B, PID 0104).
+#
+# The desktop user that linkrd runs as must be able to read and write
+# /dev/ttyACM*.  Grant access through a seat ACL (systemd-logind "uaccess")
+# so that no permanent membership of the dialout/uucp group is needed.
+# GROUP/MODE act as a fallback for systems without seat ACL support.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104", TAG+="uaccess", GROUP="dialout", MODE="0660"

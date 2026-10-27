@@ -1,0 +1,388 @@
+.\" Manual page for linkrd
+.TH LINKRD 1 "2026-10-27" "linkrd 0.1.0" "User Commands"
+.SH NAME
+linkrd \- USB ACM agent for bidirectional text clipboard synchronization
+.SH SYNOPSIS
+.B linkrd
+.RI [ options ]
+.br
+.B linkrd
+.BI install
+.RB [ \-\-dir
+.IR dir ]
+.RB [ \-\-autostart ]
+.RB [ \-\-no\-start ]
+.RB [ \-\-
+.IR runtime\-options ...]
+.br
+.B linkrd start
+.br
+.B linkrd stop
+.RB [ \-\-timeout
+.IR seconds ]
+.br
+.B linkrd pid
+.br
+.B linkrd status
+.br
+.B linkrd uninstall
+.br
+.B linkrd autostart enable
+.RB [ \-\-
+.IR runtime\-options ...]
+.br
+.B linkrd autostart disable
+.br
+.B linkrd autostart status
+.SH DESCRIPTION
+.B linkrd
+synchronizes the plain-text clipboard of the current desktop user session with
+a Radxa Linkr device over a USB CDC-ACM serial port.
+Only UTF-8 plain text is synchronized, including empty text.
+Clipboard change monitoring, periodic refresh, deduplication, loop prevention,
+write acknowledgments, heartbeats, and USB reconnection are supported.
+Images, files, and chunked transfers are not implemented.
+.PP
+The agent must run as the same desktop user whose clipboard it synchronizes.
+It talks to the device only through a serial port; Linkr itself handles the
+browser WebSocket connection.
+On Linux, the serial port is selected by USB vendor and product ID
+(default VID \fB1D6B\fR, PID \fB0104\fR) or by an explicit device path.
+.PP
+Without a subcommand,
+.B linkrd
+runs in the foreground, logging to stderr and to a rolling log file, and can be
+stopped with Ctrl-C or by the
+.B stop
+command.
+.SH OPTIONS
+Options that take effect at run time may also be saved by
+.B install
+and
+.BR "autostart enable" ,
+after a
+.B \-\-
+separator.
+.TP
+.B \-\-port \fIdevice\fR
+Use an explicit serial device, for example
+.IR /dev/ttyACM0 ,
+.IR /dev/cu.usbmodem0123456789 ,
+or
+.IR COM3 .
+Conflicts with
+.BR \-\-vid ,
+.BR \-\-pid ,
+and
+.BR \-\-serial\-number .
+.TP
+.B \-\-vid \fIhex\fR
+Override the USB vendor ID (default \fB1D6B\fR).
+The value is 16-bit hexadecimal and may carry a
+.B 0x
+prefix; it requires
+.BR \-\-pid .
+.TP
+.B \-\-pid \fIhex\fR
+Override the USB product ID (default \fB0104\fR).
+The value is 16-bit hexadecimal and may carry a
+.B 0x
+prefix; it requires
+.BR \-\-vid .
+.TP
+.B \-\-serial\-number \fIserial\fR
+Only select a device whose USB serial number matches
+.IR serial .
+Useful when several Linkr devices with the same VID and PID are attached.
+.TP
+.B \-\-baud \fIrate\fR
+Conventional ACM line coding, default \fB115200\fR.
+This is not the USB transfer speed limit; any positive value is accepted.
+.TP
+.B \-\-list\-ports
+List detected serial ports and exit.
+This does not access the clipboard, so it also works over SSH.
+.TP
+.B \-\-log\-level \fIlevel\fR
+Log verbosity: \fBoff\fR, \fBerror\fR, \fBwarn\fR, \fBinfo\fR, \fBdebug\fR,
+or \fBtrace\fR.
+Default is \fBinfo\fR.
+.TP
+.B \-\-log\-dir \fIdirectory\fR
+Write log files to
+.IR directory .
+Default is
+.RI $XDG_DATA_HOME /linkrd/logs
+(or
+.IR ~/.local/share/linkrd/logs ).
+Conflicts with
+.BR \-\-no\-file\-log .
+.TP
+.B \-\-no\-file\-log
+Log only to stderr and do not create log files.
+.TP
+.B \-\-startup
+Internal option used by login autostart and by
+.BR start :
+reload the arguments saved in
+.IR installation.json
+and retry desktop initialization until the graphical session is ready.
+It must be used alone.
+Distribution packages start linkrd through a systemd user unit instead of
+using this option directly.
+.TP
+.B \-\-help
+Print command-line help and exit.
+.TP
+.B \-\-version
+Print the program version and exit.
+.SH COMMANDS
+.TP
+.B start
+Start the installed executable in the background using the saved runtime
+arguments.
+The installation record must exist and the installed executable must still
+match its recorded checksum.
+.TP
+.B stop
+Ask the running instance of the current user to shut down gracefully and wait
+for it to exit.
+A pending request is not a forced termination.
+.TP
+.B stop \-\-timeout \fIseconds\fR
+Maximum number of seconds to wait for shutdown, from 1 to 300.
+Default is \fB10\fR.
+.TP
+.B pid
+Print the PID of the current user's running instance.
+Exits with a non-zero status when linkrd is not running.
+.TP
+.B status
+Print whether linkrd is running and its PID.
+This reports process state only, not desktop or ACM health.
+.TP
+.B install
+Copy the currently running executable to the per-user program directory and
+start it in the background.
+On Linux and other Unix-like systems the default directory is
+.IR ~/.local/bin ;
+Windows uses
+.I %LOCALAPPDATA%\ePrograms\elinkrd
+instead.
+The installation record and saved arguments are stored under
+.IR ~/.config/linkrd .
+The installer also configures
+.B PATH
+for the current user shell; follow its output and open a new terminal.
+.TP
+.B install \-\-dir \fIdirectory\fR
+Install into
+.I directory
+instead of the default per-user location.
+The binary is always named
+.IR linkrd .
+.TP
+.B install \-\-autostart
+Also register a login autostart entry
+.RI ( ~/.config/autostart/linkrd.desktop
+on Linux) so that linkrd starts with the next desktop login.
+.TP
+.B install \-\-no\-start
+Install without starting the background process now.
+.TP
+.B install \fR[\fIoptions\fR] \fB\-\- \fIruntime\-options\fR
+Save the given runtime options for later background starts and for the login
+autostart entry.
+Without a
+.B \-\-
+separator the previously saved arguments are preserved.
+.TP
+.B uninstall
+Stop nothing by itself: run
+.B stop
+first.
+Remove the installed executable, the login autostart entry, the
+.B PATH
+configuration, and the installation record.
+Log files and the configuration directory are retained.
+.TP
+.B autostart enable
+Register the login autostart entry for the installed executable.
+Optional runtime options may follow a
+.B \-\-
+separator and replace the saved arguments.
+.TP
+.B autostart disable
+Remove the login autostart entry.
+A running process is not stopped.
+.TP
+.B autostart status
+Report the installed executable path, whether it is present, whether autostart
+is registered, and the saved runtime arguments.
+This inspects the registration only, not desktop/OS overrides or process
+health.
+.SH FILES
+.TP
+.I ~/.config/linkrd/
+Per-user configuration directory
+.RI ( $XDG_CONFIG_HOME /linkrd
+when
+.B XDG_CONFIG_HOME
+is set).
+It contains:
+.TP
+.I ~/.config/linkrd/installation.json
+Installation record written by
+.BR install :
+absolute executable path, its SHA-256 checksum, and the saved runtime
+arguments.
+.TP
+.I ~/.config/linkrd/runtime.lock
+Lock file held while linkrd is running or being started.
+.TP
+.I ~/.config/linkrd/runtime.pid
+PID of the running instance.
+.TP
+.I ~/.config/linkrd/runtime.control.json
+Instance identifier used to validate local
+.B stop
+requests.
+.TP
+.I ~/.config/linkrd/runtime.stop
+Pending graceful shutdown request.
+.TP
+.I ~/.config/linkrd/management.lock
+Serializes management commands.
+.TP
+.I ~/.config/autostart/linkrd.desktop
+XDG login autostart entry created by
+.B install \-\-autostart
+or
+.BR "autostart enable" .
+.TP
+.I ~/.local/share/linkrd/logs/
+Default log directory
+.RI ( $XDG_DATA_HOME /linkrd/logs
+when
+.B XDG_DATA_HOME
+is set).
+The active file is
+.IR linkrd.log ;
+rotated files are kept as
+.IR linkrd.log.1 " ... " linkrd.log.6 .
+Rotation happens daily and when a file would exceed 10\ MiB.
+.TP
+.I /usr/bin/linkrd
+Executable path used by distribution packages.
+.TP
+.I /usr/lib/udev/rules.d/70-linkrd.rules
+Distribution udev rule granting the logged-in desktop user access to the
+Linkr CDC-ACM device through a seat ACL, with
+.BR GROUP="dialout" " MODE="0660
+as a fallback.
+.TP
+.I /usr/lib/systemd/user/linkrd.service
+Distribution systemd user unit.
+It is installed but not enabled; enable it once per user with
+.BR "systemctl --user enable --now linkrd.service" .
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME
+Base directory for
+.IR ~/.config ;
+defaults to
+.IR ~/.config .
+.TP
+.B XDG_DATA_HOME
+Base directory for
+.IR ~/.local/share ;
+defaults to
+.IR ~/.local/share .
+.TP
+.B NO_COLOR
+Disable colored stderr logging when set to a non-empty value.
+.SH EXAMPLES
+Start in the foreground and select the port explicitly:
+.PP
+.RS 4
+.B linkrd \-\-port /dev/ttyACM0 \-\-log\-level debug
+.RE
+.PP
+List serial ports without touching the clipboard:
+.PP
+.RS 4
+.B linkrd \-\-list\-ports
+.RE
+.PP
+Per-user installation with login autostart and saved runtime options
+(this is what
+.B install \-\-autostart
+does; distribution packages must not use it):
+.PP
+.RS 4
+.B linkrd install \-\-autostart \-\- \-\-port /dev/ttyACM0 \-\-log\-level debug
+.RE
+.PP
+Check and stop the current user's instance:
+.PP
+.RS 4
+.B linkrd status
+.br
+.B linkrd pid
+.br
+.B linkrd stop \-\-timeout 30
+.RE
+.PP
+Enable the distribution systemd user unit once per desktop user:
+.PP
+.RS 4
+.B systemctl \-\-user daemon-reload
+.br
+.B systemctl \-\-user enable \-\-now linkrd.service
+.RE
+.SH NOTES
+Do not mix a distribution package with
+.BR "linkrd install" .
+The
+.B install
+subcommand copies the executable into the user's home directory and writes a
+login autostart entry that runs the copied binary with
+.BR \-\-startup ;
+package upgrades cannot update that private copy, so a stale binary can keep
+running and conflict with the packaged
+.IR /usr/bin/linkrd .
+Distribution packages ship the binary, a udev rule, and a systemd user unit
+under
+.IR /usr ,
+and leave enabling the unit to the user.
+.PP
+Access to
+.I /dev/ttyACM*
+is granted by the udev rule through
+.B TAG+="uaccess"
+(systemd-logind seat ACL), so membership in the
+.B dialout
+group is normally not required.
+On systems without seat ACL support the rule falls back to group
+.B dialout
+with mode 0660; log out and back in after joining the group.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+An error occurred; for
+.B pid
+this includes linkrd not running.
+.SH SEE ALSO
+.BR systemctl (1),
+.BR systemd.unit (5),
+.BR systemd.exec (5),
+.BR udev (7),
+.BR journalctl (1)
+.PP
+The project documentation is available at
+.UR https://github.com/radxa\-linkr/linkrd
+the Linkr project page on GitHub
+.UE .

@@ -1,0 +1,25 @@
+# linkrd is a per-user agent: it needs the desktop user's Wayland/X11
+# clipboard, the user's serial-port ACL and the user's own configuration.
+# Distribution packages install this unit but do not enable it; enable it
+# once per user with:
+#
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now linkrd.service
+#
+[Unit]
+Description=Linkr USB ACM clipboard synchronization agent
+Documentation=man:linkrd(1)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/linkrd
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=graphical-session.target
