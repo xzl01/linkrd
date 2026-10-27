@@ -1,0 +1,62 @@
+#!/usr/bin/make -f
+
+# Upstream crates are not vendored in the source tree.  Keep the cargo cache
+# inside the build tree so that `dpkg-buildpackage` does not touch ~/.cargo,
+# and so that repeated builds reuse the crates downloaded by
+# override_dh_auto_configure.
+export CARGO_HOME = $(CURDIR)/debian/cargo-home
+export CARGO_INCREMENTAL = 0
+export CARGO_TARGET_DIR = $(CURDIR)/target
+
+%:
+	dh $@
+
+# Network access is required here (or a pre-populated CARGO_HOME / a vendor
+# directory configured in .cargo/config.toml); the actual build below is
+# strictly offline and --locked.
+override_dh_auto_configure:
+	cargo fetch --locked
+
+override_dh_auto_build:
+	cargo build --release --locked --offline
+
+# debhelper 13 already skips dh_auto_test on DEB_BUILD_OPTIONS=nocheck; the
+# condition is kept explicit so that the behaviour is independent of the
+# debhelper version.
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	cargo test --release --locked --offline
+endif
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf target debian/cargo-home
+
+# debhelper only auto-installs a file called README.Debian.  The file is named
+# README.debian here so that it matches the requested deliverable; install it
+# explicitly.  (It cannot be shipped under both names on case-insensitive
+# filesystems, so there is no README.Debian symlink.)
+override_dh_installdocs:
+	dh_installdocs
+	install -Dm644 debian/README.debian \
+		debian/linkrd/usr/share/doc/linkrd/README.debian
+
+# Install the Linkr udev rule as 70-linkrd.rules.  debhelper >= 13.14 installs
+# it below /usr/lib/udev/rules.d; older debhelper 13 installs /lib/udev/rules.d,
+# which is the same directory on merged-/usr systems.
+override_dh_installudev:
+	dh_installudev --priority=70
+
+# The unit is a systemd *user* unit (debian/linkrd.user.service, installed as
+# /usr/lib/systemd/user/linkrd.service).  Distribution packages must not
+# enable it: enabling is a per-user decision, and doing it as root during
+# installation would enable the unit for the wrong user (or for root).
+override_dh_installsystemduser:
+	dh_installsystemduser --no-enable
+
+# DEB_BUILD_OPTIONS=nostrip is honoured by debhelper 13 by skipping
+# dh_strip/dh_dwz; this override keeps the same guarantee explicit.
+override_dh_strip:
+ifeq (,$(filter nostrip,$(DEB_BUILD_OPTIONS)))
+	dh_strip
+endif

@@ -1,0 +1,110 @@
+linkrd -- building the Debian source package
+============================================
+
+Layout
+------
+
+  debian/                        Debian packaging (this directory)
+  man/linkrd.1                   upstream man page, shared with other packagers
+  packaging/deb/build-deb.sh     generates prebuilt .deb files on macOS
+  packaging/deb/validate-deb.py  structural validator for those .deb files
+  packaging/deb/README.md        notes about the prebuilt packages
+
+The Debian packaging was added by the packager.  No upstream source file is
+modified (no patches are applied, debian/patches/ is absent).  The udev rule
+and the systemd unit are the files from contrib/, referenced through symlinks
+in debian/ so that there is exactly one copy in the tree:
+
+  debian/linkrd.udev          -> contrib/udev/70-linkrd.rules
+  debian/linkrd.user.service  -> contrib/systemd/linkrd.service
+
+The .user.service suffix is how debhelper 13 installs systemd *user* units:
+dh_installsystemd only handles system units, while dh_installsystemduser reads
+debian/package.user.service and installs it as
+/usr/lib/systemd/user/package.service.  (dh_installsystemd has no --user
+option; older packaging instructions that mention one are wrong.)
+
+Building
+--------
+
+Install the build dependencies and run, from the top of the source tree:
+
+  dpkg-buildpackage -us -uc -b
+
+or, for a single binary package without signing:
+
+  debuild -us -uc -b
+
+Requirements:
+  * cargo and rustc >= 1.89.  Rust edition 2024 needs >= 1.85, but the
+    code also uses std::fs::File::lock/try_lock (stabilised in 1.89) and
+    the locked "time" crate requires 1.88, so 1.89 is the real MSRV.
+    Debian 13 (trixie) ships rustc 1.85.1 and therefore cannot build
+    this package; build it on sid (rustc >= 1.89), with a backported
+    toolchain, or with rustup in a clean chroot.
+  * Network access during override_dh_auto_configure, which runs
+    "cargo fetch --locked", or a pre-populated CARGO_HOME and/or a vendor
+    configuration in .cargo/config.toml.  The crates are not vendored in the
+    upstream tree, so a fully offline build only works with such a setup.
+    The build itself always runs "cargo build --release --locked --offline".
+  * No C toolchain, protoc, libudev or Wayland/X11 development packages are
+    needed: clipboard-rs uses the pure-Rust wayland-backend and x11rb, and
+    serialport is built with default-features = false (no libudev).
+  * CARGO_HOME points at debian/cargo-home inside the build tree, so the user's
+    ~/.cargo is not modified and the build is reproducible on a clean tree.
+
+Build options
+-------------
+
+  DEB_BUILD_OPTIONS=nocheck   skip the cargo test suite (alias: "nocheck" in
+                              DEB_BUILD_OPTIONS; the override checks it
+                              explicitly and debhelper 13 also skips
+                              dh_auto_test).
+  DEB_BUILD_OPTIONS=nostrip   keep debug symbols; debhelper 13 skips
+                              dh_strip/dh_dwz, and the explicit override in
+                              debian/rules does the same.
+
+The source package uses the 3.0 (quilt) format.  Because upstream does not
+publish release tarballs yet (and has no tags), an upload would have to create
+the .orig.tar.gz from the git tree at the packaged commit.
+
+Licensing
+---------
+
+Upstream ships no LICENSE file and Cargo.toml has no "license" field at version
+0.1.0.  debian/copyright therefore records "License: unknown" and explains why.
+This package must not be uploaded to the Debian archive until upstream fixes
+that; it is provided for direct installation only.
+
+Maintainer-script policy
+------------------------
+
+The package never enables or starts the linkrd systemd user unit.  Enabling is
+done once per desktop user ("systemctl --user enable --now linkrd.service"),
+because the unit needs the user's clipboard, serial-port ACL and configuration.
+dh_installsystemduser is called with --no-enable for that reason.  The udev
+rule is a plain file under /usr/lib/udev/rules.d; dh_installudev is used with
+--priority=70 so that it is installed as 70-linkrd.rules.  debhelper 13.14 and
+newer install it below /usr/lib/udev/rules.d; debhelper 13.11 (Debian 12)
+installs /lib/udev/rules.d, which is the same directory on merged-/usr systems.
+
+Prebuilt binary packages
+------------------------
+
+packaging/deb/build-deb.sh creates ready-to-install .deb files without
+dpkg-deb (the packager's build host is macOS).  Those packages are statically
+linked against musl and only install files below /usr; they contain:
+
+  /usr/bin/linkrd
+  /usr/lib/udev/rules.d/70-linkrd.rules
+  /usr/lib/systemd/user/linkrd.service
+  /usr/share/man/man1/linkrd.1.gz
+  /usr/share/doc/linkrd/{README.md,README.zh-CN.md,README.debian,copyright,
+                         changelog.Debian.gz}
+
+Their postinst reloads the udev rules conditionally (udevadm may be absent in
+containers) and does not touch systemd.  Run packaging/deb/validate-deb.py to
+check the container/tar structure, md5sums, permissions and installed size.
+See packaging/deb/README.md and packaging/deb/SMOKE.md for the checks that
+still require a real Debian/Ubuntu machine (dpkg -i, lintian, systemd user
+unit, real hardware).

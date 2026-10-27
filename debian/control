@@ -1,0 +1,38 @@
+Source: linkrd
+Section: utils
+Priority: optional
+Maintainer: hiifong <f@f.style>
+Build-Depends: debhelper-compat (= 13),
+               cargo (>= 1.89),
+               rustc (>= 1.89)
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/radxa-linkr/linkrd
+Vcs-Git: https://github.com/radxa-linkr/linkrd.git
+Vcs-Browser: https://github.com/radxa-linkr/linkrd
+
+Package: linkrd
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Recommends: systemd
+Description: USB ACM text clipboard synchronization agent for Linkr
+ Linkrd synchronizes the UTF-8 plain-text clipboard of a desktop user
+ session with a Radxa Linkr device over a USB CDC-ACM serial port. It
+ monitors clipboard changes, performs periodic refreshes, deduplicates
+ repeated content, prevents feedback loops, acknowledges writes, sends
+ heartbeats, and reconnects automatically when the device disappears.
+ .
+ Only plain text is synchronized; images, files, and chunked transfers are
+ not implemented. Clipboard access works on Wayland and X11.
+ .
+ The package installs /usr/bin/linkrd, a udev rule that grants the logged-in
+ desktop user access to the Linkr USB device, and a systemd user unit. The
+ user unit is installed but not enabled; enable it once per user with
+ "systemctl --user daemon-reload" and "systemctl --user enable --now
+ linkrd.service".
+ .
+ Do not use "linkrd install --autostart" together with this package: that
+ command installs a private executable copy in the user's home directory
+ which package upgrades cannot update. See /usr/share/doc/linkrd/ for
+ details.

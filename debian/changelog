@@ -1,0 +1,11 @@
+linkrd (0.1.0-1) unstable; urgency=medium
+
+  * Initial release.
+  * Install the upstream udev rule (70-linkrd.rules) and systemd user unit;
+    the user unit is installed but not enabled.
+  * Ship man/linkrd.1, generated from the upstream command-line definition.
+  * Upstream does not provide a LICENSE file or a Cargo.toml license field
+    yet; debian/copyright therefore records the license as "unknown" and
+    this package is not ready for an upload to the Debian archive.
+
+ -- hiifong <f@f.style>  Tue, 27 Oct 2026 11:30:00 +0800

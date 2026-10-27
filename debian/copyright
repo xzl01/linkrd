@@ -1,0 +1,17 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: linkrd
+Upstream-Contact: hiifong <f@f.style>
+Source: https://github.com/radxa-linkr/linkrd
+
+Files: *
+Copyright: hiifong <f@f.style>
+License: unknown
+ Upstream does not ship a LICENSE file and Cargo.toml contains no license
+ field at the time of packaging (linkrd 0.1.0).  The copyright holder and the
+ license terms for this work are therefore not stated by upstream.  This is an
+ upstream issue that must be resolved before the package can be uploaded to
+ the Debian archive.
+ .
+ No license (for example MIT, GPL-2+, or Apache-2.0) is assumed for this code.
+ Do not add one to this file without written confirmation from upstream.
+Comment: TODO(upstream): add a LICENSE file and a Cargo.toml "license" field.

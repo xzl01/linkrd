@@ -1,0 +1,189 @@
+linkrd for Debian
+==================
+
+linkrd synchronizes the plain-text clipboard of a desktop user session with a
+Radxa Linkr device over USB CDC-ACM.  It must run as the desktop user whose
+clipboard it synchronizes, so the Debian package ships a systemd *user* unit
+instead of a system service.  The package installs, but deliberately does not
+enable or start, that unit.
+
+Installed files
+---------------
+
+  /usr/bin/linkrd
+      The agent binary.
+  /usr/lib/udev/rules.d/70-linkrd.rules
+      Grants the logged-in desktop user read/write access to the Linkr device
+      (USB VID 1D6B, PID 0104 -> /dev/ttyACM*).
+  /usr/lib/systemd/user/linkrd.service
+      Per-user unit; starts with the graphical session once it is enabled.
+  /usr/share/man/man1/linkrd.1.gz
+  /usr/share/doc/linkrd/
+
+
+Enabling the user service
+-------------------------
+
+Log in as the desktop user (do not use sudo) and run:
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now linkrd.service
+
+Check it and follow its log:
+
+  systemctl --user status linkrd.service
+  journalctl --user -u linkrd.service -e
+  linkrd status
+  linkrd pid
+
+The unit uses ExecStart=/usr/bin/linkrd with the built-in defaults (automatic
+USB VID/PID selection, log level "info", log file in ~/.local/share/linkrd).
+If you need different arguments, do not edit the unit file in /usr/lib: use a
+drop-in instead, for example
+
+  systemctl --user edit linkrd.service
+
+and add
+
+  [Service]
+  ExecStart=
+  ExecStart=/usr/bin/linkrd --port /dev/ttyACM0 --log-level debug
+
+The service is bound to graphical-session.target (After= and PartOf=), so it
+stops with the graphical session and starts again at the next login.  It is
+not wanted by default.target on purpose: clipboard access requires a running
+desktop session.
+
+After a package upgrade, re-run "systemctl --user daemon-reload" and, if the
+unit changed, "systemctl --user restart linkrd.service".  Upgrading does not
+interrupt the running agent otherwise.
+
+
+Do not use "linkrd install" with this package
+---------------------------------------------
+
+This package puts the binary in /usr/bin and relies on systemd.  Do not run
+"linkrd install", "linkrd install --autostart", or "linkrd autostart enable"
+on a system where this package is installed.  Those commands implement a
+separate per-user installation mode:
+
+  * "linkrd install" copies the running executable to ~/.local/bin/linkrd
+    and writes ~/.config/linkrd/installation.json, which records the copy's
+    path and SHA-256 checksum.
+  * "linkrd install --autostart" additionally writes
+    ~/.config/autostart/linkrd.desktop, whose Exec line runs the *copy* with
+    --startup.  --startup loads the saved arguments from installation.json and
+    refuses to run if the executable does not match the recorded checksum.
+
+A package upgrade replaces /usr/bin/linkrd only.  A private copy created by
+"linkrd install" is never updated, and the stale copy keeps being started by
+the XDG autostart entry at every login.  This can result in the old version
+running next to the packaged one, or in a broken --startup entry.  Both modes
+also contend for the same ~/.config/linkrd/runtime.lock, so only one instance
+can run at a time.
+
+
+Migrating from a manual installation to this package
+----------------------------------------------------
+
+If linkrd was previously installed per user with "linkrd install":
+
+  # 1. Stop the manually started instance (run as the desktop user).
+  linkrd stop
+  ~/.local/bin/linkrd stop   # if "linkrd" in PATH is not the installed copy
+
+  # 2. Remove the per-user installation.  This deletes ~/.local/bin/linkrd,
+  #    ~/.config/autostart/linkrd.desktop, the PATH block in the shell
+  #    profile, and ~/.config/linkrd/installation.json.  Logs are kept.
+  linkrd uninstall
+  ~/.local/bin/linkrd uninstall   # if needed as above
+
+  # 3. Make sure the per-user binary and autostart entry are gone.
+  command -v linkrd                       # must print /usr/bin/linkrd
+  ls ~/.local/bin/linkrd                  # must not exist
+  ls ~/.config/autostart/linkrd.desktop   # must not exist
+
+  # 4. Enable the packaged user unit as described above.
+  systemctl --user daemon-reload
+  systemctl --user enable --now linkrd.service
+
+If "linkrd uninstall" refuses to remove an executable or autostart entry that
+was modified outside linkrd, remove that file manually and retry.  The
+~/.config/linkrd directory may still contain runtime lock files; it is safe to
+keep it.  On systems where the package is removed before the manual
+installation, run step 2 from a backup copy of the per-user binary, or delete
+~/.local/bin/linkrd, ~/.config/autostart/linkrd.desktop, the PATH block, and
+~/.config/linkrd/installation.json by hand.
+
+
+Device access (udev)
+--------------------
+
+The udev rule matches the Linkr CDC-ACM device by USB IDs and grants access to
+the user logged in on the local seat:
+
+  SUBSYSTEM=="tty", ATTRS{idVendor}=="1d6b", ATTRS{idProduct}=="0104",
+  TAG+="uaccess", GROUP="dialout", MODE="0660"
+
+TAG+="uaccess" uses the systemd-logind seat ACL, so normally no group
+membership is needed.  On systems without systemd-logind (or without seat ACL
+support) the rule falls back to group dialout with mode 0660; if your user
+cannot open /dev/ttyACM*, add the desktop user to the dialout group, then log
+out and back in:
+
+  sudo adduser "$USER" dialout
+
+After installing or upgrading the package the udev rules are reloaded
+automatically when udevadm is available (the prebuilt .deb does this in its
+postinst).  To do it by hand:
+
+  sudo udevadm control --reload-rules
+  sudo udevadm trigger --subsystem-match=tty --action=change
+
+Check that the device is visible:
+
+  linkrd --list-ports
+
+
+Logs and configuration
+----------------------
+
+  ~/.config/linkrd/                  per-user configuration and runtime state
+      installation.json              only present after a manual "linkrd install"
+      runtime.lock, runtime.pid,     created while linkrd is running
+      runtime.control.json, runtime.stop
+      *.lock                         management/state locks
+  ~/.local/share/linkrd/logs/        rolling logs (XDG_DATA_HOME is honoured)
+      linkrd.log                     active log file
+      linkrd.log.1 ... linkrd.log.6  rotated files
+
+Log files are rotated daily and when a file would exceed 10 MiB; at most 7
+files are kept.  The location can be changed with --log-dir, or file logging
+can be disabled with --no-file-log.  With systemd, stderr output also goes to
+the user journal ("journalctl --user -u linkrd.service").  NO_COLOR is honoured
+for stderr output.
+
+
+Uninstalling
+------------
+
+  systemctl --user disable --now linkrd.service
+  sudo apt remove linkrd
+
+Removing the package does not touch the user's logs or configuration.  Remove
+them manually if desired:
+
+  rm -rf ~/.local/share/linkrd ~/.config/linkrd
+
+If a manual per-user installation still exists, uninstall it first as
+described above; otherwise linkrd may keep running from ~/.local/bin.
+
+
+Source package
+--------------
+
+This package is built from the upstream git tree; see debian/README.source and
+packaging/deb/README.md for details.  The prebuilt binary packages distributed
+next to this source tree are statically linked against musl and have no libc
+dependency; a build from this source package is linked against the distribution
+glibc and gets its library dependencies through ${shlibs:Depends}.
