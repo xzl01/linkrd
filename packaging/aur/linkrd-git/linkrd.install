@@ -1,0 +1,42 @@
+# linkrd pacman install script.
+#
+# The package only installs files.  linkrd is a per-user desktop agent, so the
+# distro package must never enable or start the systemd user unit itself: there
+# is no way to know which desktop users should run it.  Users enable it with
+# `systemctl --user enable --now linkrd.service` (see the message below).
+
+_linkrd_udev_reload() {
+  # udevadm lives in systemd; tolerate minimal chroots where it is missing.
+  if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload-rules || true
+    udevadm trigger --subsystem-match=tty --action=change || true
+  fi
+}
+
+_linkrd_hint() {
+  cat <<'EOF'
+linkrd is a per-user desktop agent; no service has been enabled automatically.
+Enable it once per desktop user with:
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now linkrd.service
+
+The packaged udev rule grants the logged-in seat user access to the Linkr USB
+CDC-ACM serial port via a logind "uaccess" ACL.  Reconnect the Linkr device (or
+re-run the udev trigger above) if the ACL is not present yet.
+EOF
+}
+
+post_install() {
+  _linkrd_udev_reload
+  _linkrd_hint
+}
+
+post_upgrade() {
+  _linkrd_udev_reload
+  _linkrd_hint
+}
+
+post_remove() {
+  _linkrd_udev_reload
+}

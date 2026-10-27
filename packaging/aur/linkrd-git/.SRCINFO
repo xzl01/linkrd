@@ -1,0 +1,19 @@
+pkgbase = linkrd-git
+	pkgdesc = USB ACM text clipboard synchronization agent for Radxa Linkr (VCS)
+	pkgver = 0.1.0.r1.g22c63f0
+	pkgrel = 1
+	url = https://github.com/radxa-linkr/linkrd
+	install = linkrd.install
+	arch = x86_64
+	arch = aarch64
+	license = unknown
+	makedepends = cargo
+	makedepends = git
+	makedepends = rust
+	depends = gcc-libs
+	provides = linkrd
+	conflicts = linkrd
+	source = git+https://github.com/radxa-linkr/linkrd.git
+	sha256sums = SKIP
+
+pkgname = linkrd-git

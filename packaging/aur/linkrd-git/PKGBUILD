@@ -1,0 +1,86 @@
+# Maintainer: TODO <todo@example.invalid>
+# 提交到 AUR 前，请把上面的 Maintainer 行替换为实际维护者的姓名与邮箱。
+#
+# Upstream: https://github.com/radxa-linkr/linkrd
+# VCS 包：始终跟踪上游 main 分支的最新提交。安装的二进制仍然是
+# /usr/bin/linkrd，并通过 provides/conflicts 与稳定版 linkrd 互斥。
+#
+# ⚠ 说明：
+#   - 上游没有 LICENSE 文件，license 先写 'unknown'（与稳定版一致）。
+#   - pkgver= 只是占位值（当前上游 HEAD 22c63f0 对应的 pkgver() 输出），
+#     真正的版本由 pkgver() 在构建时计算；提交 AUR 前可先 `makepkg -o`
+#     让 pkgver 更新，再 `makepkg --printsrcinfo > .SRCINFO`。
+#   - man/linkrd.1 与 contrib/ 下的 udev/systemd 文件必须存在于上游仓库
+#     main 分支，package() 直接从源码树安装。
+
+pkgname=linkrd-git
+pkgver=0.1.0.r1.g22c63f0
+pkgrel=1
+pkgdesc='USB ACM text clipboard synchronization agent for Radxa Linkr (VCS)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/radxa-linkr/linkrd'
+license=('unknown')
+provides=('linkrd')
+conflicts=('linkrd')
+depends=('gcc-libs')
+makedepends=('cargo' 'git' 'rust')
+install=linkrd.install
+source=("git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  # makepkg 把 git checkout 放在 $srcdir/<仓库名>（即 linkrd），而不是 $pkgname。
+  cd "$srcdir/linkrd"
+
+  # 上游目前没有 tag，先退化为 0.1.0.r<提交数>.g<短哈希>；
+  # 上游打上 v* tag 后自动切换为 <tag>.r<提交数>.g<短哈希>
+  #（例如 v0.1.0 对应的提交会得到 0.1.0.r0.g<短哈希>）。
+  local _tag
+  if _tag=$(git describe --long --tags --abbrev=7 2>/dev/null); then
+    printf '%s\n' "$_tag" | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf '0.1.0.r%s.g%s\n' \
+      "$(git rev-list --count HEAD)" \
+      "$(git rev-parse --short=7 HEAD)"
+  fi
+}
+
+prepare() {
+  cd "$srcdir/linkrd"
+
+  export CARGO_HOME="$srcdir/cargo-home"
+  export CARGO_NET_OFFLINE=false
+  cargo fetch --locked
+}
+
+build() {
+  cd "$srcdir/linkrd"
+
+  export CARGO_HOME="$srcdir/cargo-home"
+  cargo build --release --locked --frozen
+}
+
+check() {
+  cd "$srcdir/linkrd"
+
+  export CARGO_HOME="$srcdir/cargo-home"
+  # 测试使用临时 HOME/XDG_* 与内存 mock，无剪贴板/串口/外部网络依赖；
+  # tests/install.rs 自身带 #![cfg(target_os = "linux")]。
+  # 特殊环境下不可靠时可用 `makepkg --nocheck` 跳过。
+  cargo test --release --locked --frozen
+}
+
+package() {
+  cd "$srcdir/linkrd"
+
+  # 注意：-git 包的 pkgname 是 linkrd-git，但可执行文件名和安装路径必须
+  # 与稳定版一致，仍然是 /usr/bin/linkrd。
+  install -Dm755 target/release/linkrd "$pkgdir/usr/bin/linkrd"
+  install -Dm644 man/linkrd.1 "$pkgdir/usr/share/man/man1/linkrd.1"
+  install -Dm644 contrib/udev/70-linkrd.rules \
+    "$pkgdir/usr/lib/udev/rules.d/70-linkrd.rules"
+  install -Dm644 contrib/systemd/linkrd.service \
+    "$pkgdir/usr/lib/systemd/user/linkrd.service"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 README.zh-CN.md "$pkgdir/usr/share/doc/$pkgname/README.zh-CN.md"
+}

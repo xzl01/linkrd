@@ -1,0 +1,78 @@
+# Maintainer: TODO <todo@example.invalid>
+# 提交到 AUR 前，请把上面的 Maintainer 行替换为实际维护者的姓名与邮箱。
+#
+# Upstream: https://github.com/radxa-linkr/linkrd
+# 本包从上游发布 tag 的 GitHub archive tarball 构建（源码构建，非二进制包）。
+#
+# ⚠ 发布前置条件（详见 ../README.md）：
+#   1. 上游目前只有一次 "init proj" 提交，尚未发布 v0.1.0 tag，因此
+#      source 指向的 <url>/archive/v0.1.0.tar.gz 现在会返回 404，
+#      sha256sums 只能先写 'SKIP'。上游打好 v0.1.0 tag 后必须用
+#      `updpkgsums`（或 sha256sum）把真实校验值填进来。
+#   2. 上游仓库没有 LICENSE 文件、Cargo.toml 也没有 license 字段，所以
+#      license 先如实写 'unknown'。上游补上 LICENSE 后改为对应 SPDX 标识，
+#      并把许可证文本安装到 /usr/share/licenses/$pkgname/。
+#   3. 修改 PKGBUILD 后必须在 Arch 上重新生成 .SRCINFO：
+#      `makepkg --printsrcinfo > .SRCINFO`
+#   4. man/linkrd.1 与 contrib/ 下的 udev/systemd 文件必须包含在 v0.1.0
+#      tag 里（package() 直接从源码树安装它们），否则打包会失败。
+
+pkgname=linkrd
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='USB ACM text clipboard synchronization agent for Radxa Linkr'
+arch=('x86_64' 'aarch64')
+url='https://github.com/radxa-linkr/linkrd'
+# 'unknown' 是上游缺 LICENSE 时的如实占位，不是真实许可证；见文件头注释。
+license=('unknown')
+# Rust 二进制动态链接 libgcc_s，由 gcc-libs 提供。
+# wayland/x11 剪贴板后端都是纯 Rust 实现（clipboard-rs / x11rb），
+# 运行时不需要 libwayland 或 libX11，因此不要额外声明这些依赖。
+depends=('gcc-libs')
+makedepends=('cargo' 'rust')
+install=linkrd.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+# TODO: 上游发布 v0.1.0 后必须替换为真实 sha256sum（updpkgsums）。
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+
+  # 把 crates.io 依赖抓到 $srcdir 内独立的 CARGO_HOME，让 build()/check()
+  # 能用 --frozen 完全离线构建；不要在 build() 里访问网络。
+  export CARGO_HOME="$srcdir/cargo-home"
+  export CARGO_NET_OFFLINE=false
+  cargo fetch --locked
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+
+  export CARGO_HOME="$srcdir/cargo-home"
+  # --frozen = --locked --offline，依赖已由 prepare() 抓取。
+  cargo build --release --locked --frozen
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+
+  export CARGO_HOME="$srcdir/cargo-home"
+  # 集成测试只使用临时 HOME/XDG_* 目录和内存 mock，不访问剪贴板、串口
+  # 或外部网络；tests/install.rs 自身带 #![cfg(target_os = "linux")]。
+  # 若在特殊环境（受限沙箱、root、缺少 /bin/sh）里测试不可靠，
+  # 可用 `makepkg --nocheck` 跳过。
+  cargo test --release --locked --frozen
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  install -Dm755 "target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+  install -Dm644 man/linkrd.1 "$pkgdir/usr/share/man/man1/linkrd.1"
+  install -Dm644 contrib/udev/70-linkrd.rules \
+    "$pkgdir/usr/lib/udev/rules.d/70-linkrd.rules"
+  install -Dm644 contrib/systemd/linkrd.service \
+    "$pkgdir/usr/lib/systemd/user/linkrd.service"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 README.zh-CN.md "$pkgdir/usr/share/doc/$pkgname/README.zh-CN.md"
+}
